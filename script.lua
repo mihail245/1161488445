@@ -1,10 +1,12 @@
 --[[
-    Красивое меню телепортации для Roblox
+    Улучшенное меню телепортации для Roblox
     Функции:
     - Телепорт к координатам
-    - Телепорт к игроку (выбор из списка)
+    - Сохранение координат для быстрого доступа
+    - Телепорт к игроку
     - Постоянная телепортация за игроком
     - Показать координаты
+    - Версия 1.4.8.7
 ]]
 
 local Players = game:GetService("Players")
@@ -22,7 +24,8 @@ local ColorScheme = {
     Accent = Color3.fromRGB(100, 200, 255),
     Text = Color3.fromRGB(240, 240, 240),
     Error = Color3.fromRGB(220, 80, 80),
-    Success = Color3.fromRGB(80, 220, 120)
+    Success = Color3.fromRGB(80, 220, 120),
+    SavedLocation = Color3.fromRGB(90, 180, 100)
 }
 
 -- Создание интерфейса
@@ -33,8 +36,8 @@ TeleportMenu.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0.35, 0, 0.45, 0)
-MainFrame.Position = UDim2.new(0.02, 0, 0.3, 0)
+MainFrame.Size = UDim2.new(0.35, 0, 0.5, 0)
+MainFrame.Position = UDim2.new(0.02, 0, 0.25, 0)
 MainFrame.BackgroundColor3 = ColorScheme.Background
 MainFrame.BackgroundTransparency = 0.1
 MainFrame.BorderSizePixel = 0
@@ -45,7 +48,7 @@ UICorner.Parent = MainFrame
 
 local Title = Instance.new("TextLabel")
 Title.Name = "Title"
-Title.Size = UDim2.new(1, 0, 0.1, 0)
+Title.Size = UDim2.new(1, 0, 0.08, 0)
 Title.Position = UDim2.new(0, 0, 0, 0)
 Title.BackgroundColor3 = ColorScheme.Primary
 Title.BackgroundTransparency = 0.2
@@ -56,8 +59,8 @@ Title.Font = Enum.Font.GothamBold
 
 local ScrollingFrame = Instance.new("ScrollingFrame")
 ScrollingFrame.Name = "ScrollingFrame"
-ScrollingFrame.Size = UDim2.new(1, 0, 0.9, 0)
-ScrollingFrame.Position = UDim2.new(0, 0, 0.1, 0)
+ScrollingFrame.Size = UDim2.new(1, 0, 0.92, 0)
+ScrollingFrame.Position = UDim2.new(0, 0, 0.08, 0)
 ScrollingFrame.BackgroundTransparency = 1
 ScrollingFrame.ScrollBarThickness = 5
 ScrollingFrame.ScrollBarImageColor3 = ColorScheme.Accent
@@ -88,6 +91,9 @@ ToggleButton.ImageColor3 = ColorScheme.Text
 local UICorner2 = Instance.new("UICorner")
 UICorner2.CornerRadius = UDim.new(0.5, 0)
 UICorner2.Parent = ToggleButton
+
+-- Сохраненные координаты
+local SavedLocations = {}
 
 -- Анимация кнопок
 local function SetupButton(button)
@@ -124,11 +130,11 @@ local trackingPlayer = nil
 local trackingConnection = nil
 
 -- Функция создания кнопки
-local function CreateButton(text, callback)
+local function CreateButton(text, callback, isSavedLocation)
     local button = Instance.new("TextButton")
     button.Name = text
     button.Size = UDim2.new(0.9, 0, 0, 50)
-    button.BackgroundColor3 = ColorScheme.Primary
+    button.BackgroundColor3 = isSavedLocation and ColorScheme.SavedLocation or ColorScheme.Primary
     button.BackgroundTransparency = 0.2
     button.Text = text
     button.TextColor3 = ColorScheme.Text
@@ -152,7 +158,7 @@ local function CreateButton(text, callback)
             }):Play()
             task.wait(0.1)
             TweenService:Create(button, TweenInfo.new(0.1), {
-                BackgroundColor3 = ColorScheme.Primary,
+                BackgroundColor3 = isSavedLocation and ColorScheme.SavedLocation or ColorScheme.Primary,
                 TextColor3 = ColorScheme.Text
             }):Play()
             
@@ -171,12 +177,12 @@ local function ToggleMenu()
     menuVisible = not menuVisible
     if menuVisible then
         TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Position = UDim2.new(0.02, 0, 0.3, 0)
+            Position = UDim2.new(0.02, 0, 0.25, 0)
         }):Play()
         ToggleButton.ImageRectOffset = Vector2.new(124, 204)
     else
         TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
-            Position = UDim2.new(-0.5, 0, 0.3, 0)
+            Position = UDim2.new(-0.5, 0, 0.25, 0)
         }):Play()
         ToggleButton.ImageRectOffset = Vector2.new(964, 324)
     end
@@ -237,7 +243,112 @@ local function ShowPopup(title, message, isError)
     end)
 end
 
--- 1. Телепорт к координатам
+-- Функция телепортации
+local function TeleportTo(position)
+    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(position)
+    end
+end
+
+-- 1. Добавить новые координаты для телепорта
+CreateButton("Добавить точку телепорта", function()
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0.8, 0, 0.3, 0)
+    frame.Position = UDim2.new(0.1, 0, 0.35, 0)
+    frame.BackgroundColor3 = ColorScheme.Background
+    frame.BackgroundTransparency = 0.1
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0.05, 0)
+    corner.Parent = frame
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0.2, 0)
+    title.Text = "Добавить точку телепорта"
+    title.TextColor3 = ColorScheme.Accent
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.BackgroundTransparency = 1
+    
+    local nameInput = Instance.new("TextBox")
+    nameInput.Size = UDim2.new(0.9, 0, 0.2, 0)
+    nameInput.Position = UDim2.new(0.05, 0, 0.2, 0)
+    nameInput.PlaceholderText = "Название точки"
+    nameInput.BackgroundColor3 = ColorScheme.Primary
+    nameInput.BackgroundTransparency = 0.3
+    nameInput.TextColor3 = ColorScheme.Text
+    
+    local coordsInput = Instance.new("TextBox")
+    coordsInput.Size = UDim2.new(0.9, 0, 0.2, 0)
+    coordsInput.Position = UDim2.new(0.05, 0, 0.4, 0)
+    coordsInput.PlaceholderText = "X,Y,Z или оставьте пустым для текущих"
+    coordsInput.BackgroundColor3 = ColorScheme.Primary
+    coordsInput.BackgroundTransparency = 0.3
+    coordsInput.TextColor3 = ColorScheme.Text
+    
+    local addBtn = Instance.new("TextButton")
+    addBtn.Size = UDim2.new(0.4, 0, 0.2, 0)
+    addBtn.Position = UDim2.new(0.3, 0, 0.7, 0)
+    addBtn.Text = "Добавить"
+    addBtn.TextColor3 = ColorScheme.Text
+    addBtn.BackgroundColor3 = ColorScheme.Accent
+    addBtn.Font = Enum.Font.GothamBold
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0.1, 0)
+    btnCorner.Parent = addBtn
+    
+    frame.Parent = TeleportMenu
+    title.Parent = frame
+    nameInput.Parent = frame
+    coordsInput.Parent = frame
+    addBtn.Parent = frame
+    
+    addBtn.MouseButton1Click:Connect(function()
+        local name = nameInput.Text
+        if name == "" then
+            ShowPopup("Ошибка", "Введите название точки", true)
+            return
+        end
+        
+        local position
+        if coordsInput.Text == "" then
+            -- Используем текущие координаты
+            if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                position = localPlayer.Character.HumanoidRootPart.Position
+            else
+                ShowPopup("Ошибка", "Не удалось получить текущие координаты", true)
+                return
+            end
+        else
+            -- Парсим введенные координаты
+            local coords = {}
+            for coord in string.gmatch(coordsInput.Text, "[^,]+") do
+                table.insert(coords, tonumber(coord))
+            end
+            
+            if #coords ~= 3 then
+                ShowPopup("Ошибка", "Введите координаты в формате X,Y,Z", true)
+                return
+            end
+            
+            position = Vector3.new(coords[1], coords[2], coords[3])
+        end
+        
+        -- Сохраняем точку
+        SavedLocations[name] = position
+        
+        -- Создаем кнопку для быстрого доступа
+        CreateButton(name, function()
+            TeleportTo(SavedLocations[name])
+        end, true)
+        
+        ShowPopup("Успех", "Точка '"..name.."' добавлена", false)
+        frame:Destroy()
+    end)
+end)
+
+-- 2. Телепорт к координатам
 CreateButton("Телепорт к координатам", function()
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(0.8, 0, 0.3, 0)
@@ -305,8 +416,8 @@ CreateButton("Телепорт к координатам", function()
         local y = tonumber(yInput.Text)
         local z = tonumber(zInput.Text)
         
-        if x and y and z and localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(x, y, z)
+        if x and y and z then
+            TeleportTo(Vector3.new(x, y, z))
             ShowPopup("Успех", string.format("Телепорт к %.1f, %.1f, %.1f", x, y, z), false)
             frame:Destroy()
         else
@@ -315,7 +426,7 @@ CreateButton("Телепорт к координатам", function()
     end)
 end)
 
--- 2. Телепорт к игроку
+-- 3. Телепорт к игроку
 CreateButton("Телепорт к игроку", function()
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(0.8, 0, 0.6, 0)
@@ -372,7 +483,7 @@ CreateButton("Телепорт к игроку", function()
             
             btn.MouseButton1Click:Connect(function()
                 if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    localPlayer.Character:MoveTo(player.Character.HumanoidRootPart.Position)
+                    TeleportTo(player.Character.HumanoidRootPart.Position)
                     ShowPopup("Успех", "Телепорт к "..player.Name, false)
                     frame:Destroy()
                 else
@@ -388,7 +499,7 @@ CreateButton("Телепорт к игроку", function()
     scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #players * 55)
 end)
 
--- 3. Постоянная телепортация за игроком
+-- 4. Постоянная телепортация за игроком
 CreateButton("Телепортация за игроком", function()
     if trackingPlayer then
         if trackingConnection then
@@ -479,7 +590,7 @@ CreateButton("Телепортация за игроком", function()
     scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #players * 55)
 end)
 
--- 4. Показать координаты
+-- 5. Показать координаты
 local coordsEnabled = false
 local coordsDisplay = Instance.new("TextLabel")
 coordsDisplay.Name = "CoordsDisplay"
@@ -514,5 +625,5 @@ CreateButton("Показать координаты", function()
 end)
 
 -- Анимация появления меню
-MainFrame.Position = UDim2.new(-0.5, 0, 0.3, 0)
+MainFrame.Position = UDim2.new(-0.5, 0, 0.25, 0)
 ToggleMenu()
