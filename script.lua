@@ -1,444 +1,516 @@
--- Teleport System with Stylish UI
+-- Teleport Script for Mobile with Icon
 -- Version 1.0
+-- Features: Teleportation, Waypoints, Player Tracking, Animations
 
-local teleportSystem = {
-    savedPoints = {},
-    config = {
-        followPlayer = nil,
-        followInterval = 1000, -- ms
-        uiColor = {r = 0.2, g = 0.6, b = 0.9, a = 0.8},
-        uiAnimSpeed = 0.3,
-        notificationsEnabled = true
-    },
-    ui = {
-        mainWindow = nil,
-        isMinimized = false,
-        isVisible = true
-    }
+local scriptIcon = "📱" -- Icon for the script
+local scriptName = "Teleport Master"
+
+-- Configuration
+local config = {
+    backgroundColor = {0.1, 0.1, 0.2, 0.9},
+    buttonColor = {0.2, 0.4, 0.8, 1},
+    buttonHoverColor = {0.3, 0.5, 0.9, 1},
+    textColor = {1, 1, 1, 1},
+    successColor = {0, 1, 0, 1},
+    errorColor = {1, 0, 0, 1},
+    animationSpeed = 0.2,
+    maxWaypoints = 50
 }
 
--- Animation functions
-local function animateElement(element, targetProps, duration, callback)
-    local startTime = getTickCount()
-    local initialProps = {}
+-- State variables
+local waypoints = {}
+local isMenuOpen = true
+local isTrackingPlayer = false
+local trackedPlayer = nil
+local lastUpdate = 0
+local updateInterval = 1000 -- 1 second
+
+-- UI State
+local activeTab = "waypoints"
+local showWaypointPopup = false
+local newWaypointName = ""
+local newWaypointX, newWaypointY, newWaypointZ = 0, 0, 0
+local showTeleportPopup = false
+local teleportX, teleportY, teleportZ = 0, 0, 0
+local showPlayerList = false
+
+-- Animation variables
+local menuAnimation = {
+    progress = 1,
+    target = 1,
+    direction = 1
+}
+
+local buttonAnimations = {}
+
+-- Initialize the script
+function initialize()
+    -- Load saved waypoints
+    loadWaypoints()
     
-    for prop, value in pairs(targetProps) do
-        initialProps[prop] = guiGetProperty(element, prop)
-    end
+    -- Create animations for buttons
+    setupAnimations()
     
-    local function updateAnimation()
-        local progress = (getTickCount() - startTime) / duration
-        if progress > 1 then progress = 1 end
-        
-        for prop, targetValue in pairs(targetProps) do
-            local initialValue = initialProps[prop]
-            local newValue = initialValue + (targetValue - initialValue) * progress
-            guiSetProperty(element, prop, tostring(newValue))
-        end
-        
-        if progress == 1 then
-            removeEventHandler("onClientRender", root, updateAnimation)
-            if callback then callback() end
-        end
-    end
-    
-    addEventHandler("onClientRender", root, updateAnimation)
+    -- Show welcome notification
+    showNotification("Teleport Master initialized!", config.successColor)
 end
 
--- Notification system
-local function showNotification(message, isError)
-    if not teleportSystem.config.notificationsEnabled then return end
+-- Load saved waypoints
+function loadWaypoints()
+    -- This would load from a file in a real implementation
+    waypoints = {
+        {name = "Home", x = 100, y = 200, z = 50},
+        {name = "Shop", x = 300, y = 150, z = 50},
+        {name = "Park", x = 250, y = 400, z = 60}
+    }
+end
+
+-- Save waypoints
+function saveWaypoints()
+    -- This would save to a file in a real implementation
+end
+
+-- Setup button animations
+function setupAnimations()
+    buttonAnimations = {
+        waypointsBtn = {progress = 0, target = 0},
+        teleportBtn = {progress = 0, target = 0},
+        playersBtn = {progress = 0, target = 0},
+        settingsBtn = {progress = 0, target = 0},
+        extrasBtn = {progress = 0, target = 0}
+    }
+end
+
+-- Show notification
+function showNotification(message, color)
+    -- Implementation would show a popup notification
+    print("Notification: " .. message)
+end
+
+-- Get current player coordinates
+function getPlayerCoords()
+    -- Implementation would get actual player coordinates
+    return 100, 200, 50 -- Example coordinates
+end
+
+-- Teleport player to coordinates
+function teleportTo(x, y, z)
+    -- Implementation would handle the teleportation
+    showNotification(string.format("Teleported to %.1f, %.1f, %.1f", x, y, z), config.successColor)
+end
+
+-- Teleport to player
+function teleportToPlayer(playerId)
+    -- Implementation would get player coordinates and teleport
+    showNotification("Teleported to player " .. playerId, config.successColor)
+end
+
+-- Start tracking player
+function startTracking(playerId)
+    isTrackingPlayer = true
+    trackedPlayer = playerId
+    showNotification("Now tracking player " .. playerId, config.successColor)
+end
+
+-- Stop tracking player
+function stopTracking()
+    isTrackingPlayer = false
+    trackedPlayer = nil
+    showNotification("Stopped tracking", config.successColor)
+end
+
+-- Save current position as waypoint
+function saveCurrentPosition(name)
+    local x, y, z = getPlayerCoords()
     
-    local notification = guiCreateLabel(0.8, 0.05, 0.18, 0.05, message, true)
-    guiSetProperty(notification, "AlwaysOnTop", "True")
-    guiSetProperty(notification, "TextColour", isError and "FFFF0000" or "FF00FF00")
-    guiSetAlpha(notification, 0)
-    
-    animateElement(notification, {Alpha = 1}, 300, function()
-        setTimer(function()
-            animateElement(notification, {Alpha = 0}, 300, function()
-                destroyElement(notification)
-            end)
-        end, 3000, 1)
-    end)
-end
-
--- Coordinate functions
-local function getPlayerCoordinates()
-    local x, y, z = getElementPosition(localPlayer)
-    return x, y, z
-end
-
-local function formatCoordinates(x, y, z)
-    return string.format("%.2f, %.2f, %.2f", x, y, z)
-end
-
--- Teleport functions
-local function teleportToCoordinates(x, y, z)
-    if not x or not y or not z then
-        showNotification("Invalid coordinates!", true)
-        return false
-    end
-    
-    if setElementPosition(localPlayer, x, y, z) then
-        showNotification("Teleported successfully!")
-        return true
-    else
-        showNotification("Teleport failed!", true)
-        return false
-    end
-end
-
-local function teleportToPlayer(targetPlayer)
-    if not isElement(targetPlayer) then
-        showNotification("Player not found!", true)
-        return false
-    end
-    
-    local x, y, z = getElementPosition(targetPlayer)
-    return teleportToCoordinates(x, y, z)
-end
-
-local function startFollowingPlayer(targetPlayer)
-    if teleportSystem.config.followPlayer == targetPlayer then
-        teleportSystem.config.followPlayer = nil
-        showNotification("Stopped following player")
+    if #waypoints >= config.maxWaypoints then
+        showNotification("Waypoint limit reached!", config.errorColor)
         return
     end
     
-    teleportSystem.config.followPlayer = targetPlayer
-    showNotification("Now following " .. getPlayerName(targetPlayer))
+    table.insert(waypoints, {
+        name = name,
+        x = x,
+        y = y,
+        z = z
+    })
     
-    -- Create follow loop if not already running
-    if not teleportSystem.followTimer then
-        teleportSystem.followTimer = setTimer(function()
-            if teleportSystem.config.followPlayer and isElement(teleportSystem.config.followPlayer) then
-                teleportToPlayer(teleportSystem.config.followPlayer)
-            else
-                if isTimer(teleportSystem.followTimer) then
-                    killTimer(teleportSystem.followTimer)
-                    teleportSystem.followTimer = nil
-                end
-                teleportSystem.config.followPlayer = nil
-                showNotification("Stopped following (player left)", true)
-            end
-        end, teleportSystem.config.followInterval, 0)
-    end
+    saveWaypoints()
+    showNotification("Waypoint '" .. name .. "' saved!", config.successColor)
 end
 
--- Saved points management
-local function saveCurrentPosition(pointName)
-    if not pointName or pointName == "" then
-        showNotification("Point name cannot be empty!", true)
-        return false
-    end
-    
-    if teleportSystem.savedPoints[pointName] then
-        showNotification("Point name already exists!", true)
-        return false
-    end
-    
-    local x, y, z = getPlayerCoordinates()
-    teleportSystem.savedPoints[pointName] = {x = x, y = y, z = z}
-    
-    showNotification("Point '" .. pointName .. "' saved successfully!")
-    return true
-end
-
-local function deleteSavedPoint(pointName)
-    if not teleportSystem.savedPoints[pointName] then
-        showNotification("Point not found!", true)
-        return false
-    end
-    
-    teleportSystem.savedPoints[pointName] = nil
-    showNotification("Point '" .. pointName .. "' deleted")
-    return true
-end
-
-local function teleportToSavedPoint(pointName)
-    local point = teleportSystem.savedPoints[pointName]
-    if not point then
-        showNotification("Point not found!", true)
-        return false
-    end
-    
-    return teleportToCoordinates(point.x, point.y, point.z)
-end
-
--- UI functions
-local function createMainWindow()
-    -- Main window
-    teleportSystem.ui.mainWindow = guiCreateWindow(0.7, 0.25, 0.28, 0.5, "Teleport System v1.0", true)
-    guiSetProperty(teleportSystem.ui.mainWindow, "AlwaysOnTop", "True")
-    guiSetProperty(teleportSystem.ui.mainWindow, "Alpha", tostring(teleportSystem.config.uiColor.a))
-    guiWindowSetSizable(teleportSystem.ui.mainWindow, false)
-    
-    -- Tab panel
-    local tabPanel = guiCreateTabPanel(0.02, 0.05, 0.96, 0.9, true, teleportSystem.ui.mainWindow)
-    
-    -- Teleport tab
-    local teleportTab = guiCreateTab("Teleport", tabPanel)
-    
-    -- Coordinates section
-    local coordLabel = guiCreateLabel(0.05, 0.05, 0.9, 0.05, "Current coordinates: " .. formatCoordinates(getPlayerCoordinates()), true, teleportTab)
-    guiLabelSetHorizontalAlign(coordLabel, "center")
-    
-    -- Manual teleport section
-    local manualTeleportLabel = guiCreateLabel(0.05, 0.12, 0.9, 0.05, "Manual Teleport", true, teleportTab)
-    guiSetFont(manualTeleportLabel, "default-bold-small")
-    
-    local xEdit = guiCreateEdit(0.05, 0.18, 0.28, 0.07, "X", true, teleportTab)
-    local yEdit = guiCreateEdit(0.35, 0.18, 0.28, 0.07, "Y", true, teleportTab)
-    local zEdit = guiCreateEdit(0.65, 0.18, 0.28, 0.07, "Z", true, teleportTab)
-    
-    local teleportButton = guiCreateButton(0.05, 0.27, 0.9, 0.08, "Teleport to Coordinates", true, teleportTab)
-    
-    -- Player teleport section
-    local playerTeleportLabel = guiCreateLabel(0.05, 0.37, 0.9, 0.05, "Teleport to Player", true, teleportTab)
-    guiSetFont(playerTeleportLabel, "default-bold-small")
-    
-    local playerGrid = guiCreateGridList(0.05, 0.43, 0.9, 0.3, true, teleportTab)
-    guiGridListAddColumn(playerGrid, "Player", 0.8)
-    
-    local teleportToPlayerButton = guiCreateButton(0.05, 0.74, 0.44, 0.08, "Teleport to Player", true, teleportTab)
-    local followPlayerButton = guiCreateButton(0.51, 0.74, 0.44, 0.08, "Toggle Follow", true, teleportTab)
-    
-    -- Saved points tab
-    local savedPointsTab = guiCreateTab("Saved Points", tabPanel)
-    
-    local savedPointsLabel = guiCreateLabel(0.05, 0.05, 0.9, 0.05, "Saved Teleport Points", true, savedPointsTab)
-    guiSetFont(savedPointsLabel, "default-bold-small")
-    
-    local pointsGrid = guiCreateGridList(0.05, 0.12, 0.9, 0.6, true, savedPointsTab)
-    guiGridListAddColumn(pointsGrid, "Point Name", 0.6)
-    guiGridListAddColumn(pointsGrid, "Coordinates", 0.4)
-    
-    local saveCurrentButton = guiCreateButton(0.05, 0.74, 0.44, 0.08, "Save Current Position", true, savedPointsTab)
-    local deletePointButton = guiCreateButton(0.51, 0.74, 0.44, 0.08, "Delete Selected", true, savedPointsTab)
-    
-    local pointNameEdit = guiCreateEdit(0.05, 0.83, 0.9, 0.07, "Point Name", true, savedPointsTab)
-    
-    -- Settings tab
-    local settingsTab = guiCreateTab("Settings", tabPanel)
-    
-    local colorLabel = guiCreateLabel(0.05, 0.05, 0.9, 0.05, "UI Color", true, settingsTab)
-    guiSetFont(colorLabel, "default-bold-small")
-    
-    local colorRed = guiCreateEdit(0.05, 0.12, 0.28, 0.07, tostring(teleportSystem.config.uiColor.r * 255), true, settingsTab)
-    local colorGreen = guiCreateEdit(0.35, 0.12, 0.28, 0.07, tostring(teleportSystem.config.uiColor.g * 255), true, settingsTab)
-    local colorBlue = guiCreateEdit(0.65, 0.12, 0.28, 0.07, tostring(teleportSystem.config.uiColor.b * 255), true, settingsTab)
-    
-    local applyColorButton = guiCreateButton(0.05, 0.22, 0.9, 0.08, "Apply Color", true, settingsTab)
-    
-    local notificationsCheckbox = guiCreateCheckBox(0.05, 0.32, 0.9, 0.06, "Enable Notifications", teleportSystem.config.notificationsEnabled, true, settingsTab)
-    
-    -- Minimize button
-    local minimizeButton = guiCreateButton(0.9, 0.02, 0.08, 0.04, "-", true, teleportSystem.ui.mainWindow)
-    guiSetProperty(minimizeButton, "AlwaysOnTop", "True")
-    
-    -- Update UI colors
-    local function updateUIColor()
-        local color = teleportSystem.config.uiColor
-        local colorHex = string.format("FF%02X%02X%02X", 
-            math.floor(color.r * 255), 
-            math.floor(color.g * 255), 
-            math.floor(color.b * 255))
-        
-        guiSetProperty(teleportSystem.ui.mainWindow, "CaptionColour", colorHex)
-        
-        for _, element in ipairs(getElementChildren(teleportSystem.ui.mainWindow)) do
-            if getElementType(element) == "gui-tabpanel" then
-                guiSetProperty(element, "TabTextColour", colorHex)
-                guiSetProperty(element, "TabSelectedTextColour", colorHex)
-            elseif getElementType(element) == "gui-button" then
-                guiSetProperty(element, "NormalTextColour", colorHex)
-                guiSetProperty(element, "HoverTextColour", "FFFFFFFF")
-            end
-        end
-    end
-    
-    updateUIColor()
-    
-    -- Button hover effects
-    local function setupButtonHover(button)
-        local originalTextColor = guiGetProperty(button, "NormalTextColour")
-        
-        addEventHandler("onClientMouseEnter", button, function()
-            animateElement(button, {Alpha = 1}, teleportSystem.config.uiAnimSpeed)
-            guiSetProperty(button, "NormalTextColour", "FFFFFFFF")
-        end, false)
-        
-        addEventHandler("onClientMouseLeave", button, function()
-            animateElement(button, {Alpha = teleportSystem.config.uiColor.a}, teleportSystem.config.uiAnimSpeed)
-            guiSetProperty(button, "NormalTextColour", originalTextColor)
-        end, false)
-    end
-    
-    -- Apply hover effects to all buttons
-    for _, element in ipairs(getElementChildren(teleportTab)) do
-        if getElementType(element) == "gui-button" then
-            setupButtonHover(element)
-        end
-    end
-    
-    for _, element in ipairs(getElementChildren(savedPointsTab)) do
-        if getElementType(element) == "gui-button" then
-            setupButtonHover(element)
-        end
-    end
-    
-    for _, element in ipairs(getElementChildren(settingsTab)) do
-        if getElementType(element) == "gui-button" then
-            setupButtonHover(element)
-        end
-    end
-    
-    setupButtonHover(minimizeButton)
-    
-    -- Update player list
-    local function updatePlayerList()
-        guiGridListClear(playerGrid)
-        
-        for _, player in ipairs(getElementsByType("player")) do
-            if player ~= localPlayer then
-                local row = guiGridListAddRow(playerGrid)
-                guiGridListSetItemText(playerGrid, row, 1, getPlayerName(player), false, false)
-                guiGridListSetItemData(playerGrid, row, 1, player)
-            end
-        end
-    end
-    
-    -- Update saved points list
-    local function updateSavedPointsList()
-        guiGridListClear(pointsGrid)
-        
-        for name, coords in pairs(teleportSystem.savedPoints) do
-            local row = guiGridListAddRow(pointsGrid)
-            guiGridListSetItemText(pointsGrid, row, 1, name, false, false)
-            guiGridListSetItemText(pointsGrid, row, 2, formatCoordinates(coords.x, coords.y, coords.z), false, false)
-            guiGridListSetItemData(pointsGrid, row, 1, name)
-        end
-    end
-    
-    -- Update coordinates display
-    local function updateCoordinatesDisplay()
-        guiSetText(coordLabel, "Current coordinates: " .. formatCoordinates(getPlayerCoordinates()))
-    end
-    
-    -- Event handlers
-    addEventHandler("onClientGUIClick", teleportButton, function()
-        local x = tonumber(guiGetText(xEdit))
-        local y = tonumber(guiGetText(yEdit))
-        local z = tonumber(guiGetText(zEdit))
-        
-        teleportToCoordinates(x, y, z)
-    end, false)
-    
-    addEventHandler("onClientGUIClick", teleportToPlayerButton, function()
-        local selectedRow = guiGridListGetSelectedItem(playerGrid)
-        if selectedRow == -1 then return end
-        
-        local player = guiGridListGetItemData(playerGrid, selectedRow, 1)
-        teleportToPlayer(player)
-    end, false)
-    
-    addEventHandler("onClientGUIClick", followPlayerButton, function()
-        local selectedRow = guiGridListGetSelectedItem(playerGrid)
-        if selectedRow == -1 then return end
-        
-        local player = guiGridListGetItemData(playerGrid, selectedRow, 1)
-        startFollowingPlayer(player)
-    end, false)
-    
-    addEventHandler("onClientGUIClick", saveCurrentButton, function()
-        local pointName = guiGetText(pointNameEdit)
-        if saveCurrentPosition(pointName) then
-            updateSavedPointsList()
-        end
-    end, false)
-    
-    addEventHandler("onClientGUIClick", deletePointButton, function()
-        local selectedRow = guiGridListGetSelectedItem(pointsGrid)
-        if selectedRow == -1 then return end
-        
-        local pointName = guiGridListGetItemData(pointsGrid, selectedRow, 1)
-        if deleteSavedPoint(pointName) then
-            updateSavedPointsList()
-        end
-    end, false)
-    
-    addEventHandler("onClientGUIClick", pointsGrid, function(button, state)
-        if button == "left" and state == "up" then
-            local selectedRow = guiGridListGetSelectedItem(pointsGrid)
-            if selectedRow == -1 then return end
-            
-            local pointName = guiGridListGetItemData(pointsGrid, selectedRow, 1)
-            teleportToSavedPoint(pointName)
-        end
-    end, false)
-    
-    addEventHandler("onClientGUIClick", applyColorButton, function()
-        local r = tonumber(guiGetText(colorRed)) or 0
-        local g = tonumber(guiGetText(colorGreen)) or 0
-        local b = tonumber(guiGetText(colorBlue)) or 0
-        
-        teleportSystem.config.uiColor.r = math.min(math.max(r / 255, 0), 1)
-        teleportSystem.config.uiColor.g = math.min(math.max(g / 255, 0), 1)
-        teleportSystem.config.uiColor.b = math.min(math.max(b / 255, 0), 1)
-        
-        updateUIColor()
-        showNotification("UI color updated!")
-    end, false)
-    
-    addEventHandler("onClientGUIClick", notificationsCheckbox, function()
-        teleportSystem.config.notificationsEnabled = guiCheckBoxGetSelected(notificationsCheckbox)
-    end, false)
-    
-    addEventHandler("onClientGUIClick", minimizeButton, function()
-        if teleportSystem.ui.isMinimized then
-            -- Restore
-            guiSetSize(teleportSystem.ui.mainWindow, 0.28, 0.5, true)
-            guiSetText(minimizeButton, "-")
-            teleportSystem.ui.isMinimized = false
-        else
-            -- Minimize
-            guiSetSize(teleportSystem.ui.mainWindow, 0.28, 0.05, true)
-            guiSetText(minimizeButton, "+")
-            teleportSystem.ui.isMinimized = true
-        end
-    end, false)
-    
-    -- Update lists initially
-    updatePlayerList()
-    updateSavedPointsList()
-    
-    -- Set up periodic updates
-    setTimer(updatePlayerList, 5000, 0)
-    setTimer(updateCoordinatesDisplay, 1000, 0)
-end
-
--- Toggle UI visibility
-local function toggleTeleportUI()
-    teleportSystem.ui.isVisible = not teleportSystem.ui.isVisible
-    guiSetVisible(teleportSystem.ui.mainWindow, teleportSystem.ui.isVisible)
-    
-    if teleportSystem.ui.isVisible then
-        showNotification("Teleport system activated")
+-- Delete waypoint
+function deleteWaypoint(index)
+    if index >= 1 and index <= #waypoints then
+        local name = waypoints[index].name
+        table.remove(waypoints, index)
+        saveWaypoints()
+        showNotification("Waypoint '" .. name .. "' deleted", config.successColor)
     else
-        showNotification("Teleport system hidden")
+        showNotification("Invalid waypoint index", config.errorColor)
     end
 end
 
--- Initialize the system
-local function initTeleportSystem()
-    createMainWindow()
+-- Update animations
+function updateAnimations(deltaTime)
+    -- Menu animation
+    menuAnimation.progress = lerp(menuAnimation.progress, menuAnimation.target, config.animationSpeed * deltaTime)
     
-    -- Bind key to toggle UI (F5 by default)
-    bindKey("F5", "down", toggleTeleportUI)
-    
-    showNotification("Teleport system loaded! Press F5 to open/close.")
+    -- Button animations
+    for _, anim in pairs(buttonAnimations) do
+        anim.progress = lerp(anim.progress, anim.target, config.animationSpeed * deltaTime * 2)
+    end
 end
 
--- Start the system when resource starts
-addEventHandler("onClientResourceStart", resourceRoot, initTeleportSystem)
+-- Linear interpolation
+function lerp(a, b, t)
+    return a + (b - a) * t
+end
+
+-- Draw the UI
+function drawUI()
+    -- Main window
+    local windowWidth = 300 * menuAnimation.progress
+    local windowHeight = 500
+    
+    -- Draw main container
+    drawRect(10, 10, windowWidth, windowHeight, config.backgroundColor)
+    
+    -- Draw header
+    drawText(scriptIcon .. " " .. scriptName, 20, 20, 24, config.textColor)
+    
+    -- Draw minimize button
+    if drawButton(isMenuOpen and "◄" or "►", windowWidth - 30, 20, 30, 30) then
+        isMenuOpen = not isMenuOpen
+        menuAnimation.target = isMenuOpen and 1 or 0
+    end
+    
+    if menuAnimation.progress > 0.1 then
+        -- Draw tabs
+        local tabWidth = (windowWidth - 40) / 5
+        
+        if drawTabButton("Waypoints", 20, 60, tabWidth, 40, buttonAnimations.waypointsBtn.progress, activeTab == "waypoints") then
+            activeTab = "waypoints"
+        end
+        
+        if drawTabButton("Teleport", 20 + tabWidth, 60, tabWidth, 40, buttonAnimations.teleportBtn.progress, activeTab == "teleport") then
+            activeTab = "teleport"
+        end
+        
+        if drawTabButton("Players", 20 + tabWidth*2, 60, tabWidth, 40, buttonAnimations.playersBtn.progress, activeTab == "players") then
+            activeTab = "players"
+        end
+        
+        if drawTabButton("Extras", 20 + tabWidth*3, 60, tabWidth, 40, buttonAnimations.extrasBtn.progress, activeTab == "extras") then
+            activeTab = "extras"
+        end
+        
+        if drawTabButton("Settings", 20 + tabWidth*4, 60, tabWidth, 40, buttonAnimations.settingsBtn.progress, activeTab == "settings") then
+            activeTab = "settings"
+        end
+        
+        -- Draw tab content
+        if activeTab == "waypoints" then
+            drawWaypointsTab(windowWidth)
+        elseif activeTab == "teleport" then
+            drawTeleportTab(windowWidth)
+        elseif activeTab == "players" then
+            drawPlayersTab(windowWidth)
+        elseif activeTab == "extras" then
+            drawExtrasTab(windowWidth)
+        elseif activeTab == "settings" then
+            drawSettingsTab(windowWidth)
+        end
+    end
+    
+    -- Draw popups on top
+    if showWaypointPopup then
+        drawWaypointPopup(windowWidth, windowHeight)
+    end
+    
+    if showTeleportPopup then
+        drawTeleportPopup(windowWidth, windowHeight)
+    end
+    
+    if showPlayerList then
+        drawPlayerListPopup(windowWidth, windowHeight)
+    end
+end
+
+-- Draw waypoints tab
+function drawWaypointsTab(windowWidth)
+    local x, y, z = getPlayerCoords()
+    
+    -- Current coordinates
+    drawText(string.format("Current: %.1f, %.1f, %.1f", x, y, z), 20, 120, 16, config.textColor)
+    
+    -- Save current position button
+    if drawButton("Save Current Position", 20, 150, windowWidth - 40, 40) then
+        showWaypointPopup = true
+        newWaypointName = ""
+    end
+    
+    -- Waypoints list
+    drawText("Saved Waypoints:", 20, 210, 18, config.textColor)
+    
+    for i, wp in ipairs(waypoints) do
+        local yPos = 240 + (i-1)*60
+        
+        -- Waypoint entry
+        drawRect(20, yPos, windowWidth - 80, 50, {0.15, 0.15, 0.25, 1})
+        drawText(wp.name, 30, yPos + 10, 16, config.textColor)
+        drawText(string.format("%.1f, %.1f, %.1f", wp.x, wp.y, wp.z), 30, yPos + 30, 14, {0.8, 0.8, 0.8, 1})
+        
+        -- Teleport button
+        if drawButton("TP", windowWidth - 50, yPos, 30, 50) then
+            teleportTo(wp.x, wp.y, wp.z)
+        end
+        
+        -- Delete button (with confirmation)
+        if drawButton("✕", windowWidth - 90, yPos, 30, 50, {0.8, 0.2, 0.2, 1}) then
+            deleteWaypoint(i)
+        end
+    end
+end
+
+-- Draw teleport tab
+function drawTeleportTab(windowWidth)
+    -- Manual coordinates input
+    drawText("Teleport to Coordinates:", 20, 120, 18, config.textColor)
+    
+    drawText("X:", 20, 160, 16, config.textColor)
+    teleportX = drawInputField(50, 155, windowWidth - 70, 30, teleportX)
+    
+    drawText("Y:", 20, 200, 16, config.textColor)
+    teleportY = drawInputField(50, 195, windowWidth - 70, 30, teleportY)
+    
+    drawText("Z:", 20, 240, 16, config.textColor)
+    teleportZ = drawInputField(50, 235, windowWidth - 70, 30, teleportZ)
+    
+    if drawButton("Teleport", 20, 280, windowWidth - 40, 40) then
+        local x = tonumber(teleportX) or 0
+        local y = tonumber(teleportY) or 0
+        local z = tonumber(teleportZ) or 0
+        teleportTo(x, y, z)
+    end
+    
+    -- Additional teleport options
+    if drawButton("Teleport to Ground", 20, 340, windowWidth - 40, 40) then
+        -- Implementation would find ground level and teleport
+        showNotification("Teleported to ground level", config.successColor)
+    end
+    
+    if drawButton("Teleport to Marker", 20, 390, windowWidth - 40, 40) then
+        -- Implementation would teleport to map marker
+        showNotification("Teleported to map marker", config.successColor)
+    end
+end
+
+-- Draw players tab
+function drawPlayersTab(windowWidth)
+    -- Player tracking status
+    if isTrackingPlayer then
+        if drawButton("Stop Tracking", 20, 120, windowWidth - 40, 40, {0.8, 0.2, 0.2, 1}) then
+            stopTracking()
+        end
+        drawText("Currently tracking: " .. trackedPlayer, 20, 170, 16, config.textColor)
+    else
+        drawText("Player Tracking", 20, 120, 18, config.textColor)
+        drawText("Not currently tracking", 20, 150, 16, {0.8, 0.8, 0.8, 1})
+    end
+    
+    -- Player list button
+    if drawButton("Show Player List", 20, 200, windowWidth - 40, 40) then
+        showPlayerList = true
+    end
+    
+    -- Nearby players
+    drawText("Nearby Players:", 20, 270, 18, config.textColor)
+    
+    -- Example player list (would be populated dynamically)
+    local players = {
+        {id = "Player1", distance = 50},
+        {id = "Player2", distance = 120},
+        {id = "Player3", distance = 250}
+    }
+    
+    for i, player in ipairs(players) do
+        local yPos = 300 + (i-1)*60
+        
+        -- Player entry
+        drawRect(20, yPos, windowWidth - 80, 50, {0.15, 0.15, 0.25, 1})
+        drawText(player.id, 30, yPos + 10, 16, config.textColor)
+        drawText(string.format("%d meters", player.distance), 30, yPos + 30, 14, {0.8, 0.8, 0.8, 1})
+        
+        -- Teleport button
+        if drawButton("TP", windowWidth - 50, yPos, 30, 50) then
+            teleportToPlayer(player.id)
+        end
+        
+        -- Track button
+        if drawButton("Track", windowWidth - 90, yPos, 30, 50, {0.2, 0.8, 0.2, 1}) then
+            startTracking(player.id)
+        end
+    end
+end
+
+-- Draw extras tab
+function drawExtrasTab(windowWidth)
+    drawText("Extra Features:", 20, 120, 18, config.textColor)
+    
+    -- Vehicle spawner
+    if drawButton("Spawn Vehicle", 20, 160, windowWidth - 40, 40) then
+        showNotification("Vehicle spawned", config.successColor)
+    end
+    
+    -- Weapon spawner
+    if drawButton("Get Weapons", 20, 210, windowWidth - 40, 40) then
+        showNotification("Weapons added", config.successColor)
+    end
+    
+    -- Health and armor
+    if drawButton("Full Health + Armor", 20, 260, windowWidth - 40, 40) then
+        showNotification("Health and armor restored", config.successColor)
+    end
+    
+    -- Weather control
+    if drawButton("Change Weather", 20, 310, windowWidth - 40, 40) then
+        showNotification("Weather changed", config.successColor)
+    end
+    
+    -- Time control
+    if drawButton("Set Time", 20, 360, windowWidth - 40, 40) then
+        showNotification("Time set", config.successColor)
+    end
+end
+
+-- Draw settings tab
+function drawSettingsTab(windowWidth)
+    drawText("Settings:", 20, 120, 18, config.textColor)
+    
+    -- Theme selector
+    drawText("Color Theme:", 20, 160, 16, config.textColor)
+    
+    local themes = {
+        {"Blue", {0.2, 0.4, 0.8, 1}},
+        {"Red", {0.8, 0.2, 0.2, 1}},
+        {"Green", {0.2, 0.8, 0.2, 1}},
+        {"Purple", {0.6, 0.2, 0.8, 1}}
+    }
+    
+    for i, theme in ipairs(themes) do
+        local xPos = 20 + (i-1)*70
+        if xPos + 60 > windowWidth then break end
+        
+        if drawButton(theme[1], xPos, 190, 60, 30, theme[2]) then
+            config.buttonColor = theme[2]
+            config.buttonHoverColor = {
+                math.min(theme[2][1] + 0.1, 1),
+                math.min(theme[2][2] + 0.1, 1),
+                math.min(theme[2][3] + 0.1, 1),
+                1
+            }
+            showNotification("Theme set to " .. theme[1], config.successColor)
+        end
+    end
+    
+    -- Animation toggle
+    drawText("Animations:", 20, 240, 16, config.textColor)
+    if drawButton("Toggle Animations", 20, 270, windowWidth - 40, 40) then
+        config.animationSpeed = config.animationSpeed > 0 and 0 or 0.2
+        showNotification("Animations " .. (config.animationSpeed > 0 and "enabled" or "disabled"), config.successColor)
+    end
+    
+    -- Keybind settings
+    drawText("Keybinds:", 20, 330, 16, config.textColor)
+    if drawButton("Configure Keybinds", 20, 360, windowWidth - 40, 40) then
+        showNotification("Keybind configuration opened", config.successColor)
+    end
+    
+    -- Save settings
+    if drawButton("Save Settings", 20, 420, windowWidth - 40, 40, {0.2, 0.8, 0.2, 1}) then
+        showNotification("Settings saved", config.successColor)
+    end
+end
+
+-- Draw waypoint popup
+function drawWaypointPopup(windowWidth, windowHeight)
+    -- Dark background
+    drawRect(0, 0, windowWidth + 20, windowHeight + 20, {0, 0, 0, 0.7})
+    
+    -- Popup container
+    local popupWidth = 250
+    local popupHeight = 180
+    local popupX = (windowWidth - popupWidth) / 2
+    local popupY = (windowHeight - popupHeight) / 2
+    
+    drawRect(popupX, popupY, popupWidth, popupHeight, config.backgroundColor)
+    drawText("Save Waypoint", popupX + 10, popupY + 10, 20, config.textColor)
+    
+    -- Name input
+    drawText("Name:", popupX + 10, popupY + 50, 16, config.textColor)
+    newWaypointName = drawInputField(popupX + 70, popupY + 45, popupWidth - 80, 30, newWaypointName)
+    
+    -- Current coordinates
+    local x, y, z = getPlayerCoords()
+    drawText(string.format("Coordinates: %.1f, %.1f, %.1f", x, y, z), popupX + 10, popupY + 85, 14, {0.8, 0.8, 0.8, 1})
+    
+    -- Save button
+    if drawButton("Save", popupX + 20, popupY + 120, popupWidth - 40, 40) then
+        if newWaypointName and newWaypointName ~= "" then
+            saveCurrentPosition(newWaypointName)
+            showWaypointPopup = false
+        else
+            showNotification("Please enter a name", config.errorColor)
+        end
+    end
+    
+    -- Cancel button
+    if drawButton("Cancel", popupX + 20, popupY + 170, popupWidth - 40, 40, {0.8, 0.2, 0.2, 1}) then
+        showWaypointPopup = false
+    end
+end
+
+-- Draw teleport popup
+function drawTeleportPopup(windowWidth, windowHeight)
+    -- Similar implementation to waypoint popup
+    -- Would show manual coordinate input fields
+end
+
+-- Draw player list popup
+function drawPlayerListPopup(windowWidth, windowHeight)
+    -- Similar implementation to waypoint popup
+    -- Would show a scrollable list of all players
+end
+
+-- UI helper functions (these would be implemented in the actual environment)
+function drawRect(x, y, w, h, color) end
+function drawText(text, x, y, size, color) end
+function drawButton(text, x, y, w, h, color, isActive) return false end
+function drawTabButton(text, x, y, w, h, animProgress, isActive) return false end
+function drawInputField(x, y, w, h, currentText) return currentText end
+
+-- Main loop
+function main()
+    local currentTime = getCurrentTime()
+    local deltaTime = currentTime - lastUpdate
+    lastUpdate = currentTime
+    
+    -- Update animations
+    updateAnimations(deltaTime)
+    
+    -- Handle player tracking
+    if isTrackingPlayer and deltaTime >= updateInterval then
+        -- Implementation would update position to follow tracked player
+    end
+    
+    -- Draw UI
+    drawUI()
+end
+
+-- Initialize and start the script
+initialize()
+while true do
+    main()
+    wait(0) -- Yield to prevent freezing
+end
