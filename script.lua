@@ -1,516 +1,798 @@
--- Teleport Script for Mobile with Icon
--- Version 1.0
--- Features: Teleportation, Waypoints, Player Tracking, Animations
+--[[
+    Улучшенное меню телепортации с сохранением точек
+    Функции:
+    - Сохранение точек телепорта с названиями
+    - Удаление сохраненных точек
+    - Телепорт к координатам
+    - Телепорт к игроку
+    - Постоянная телепортация за игроком
+    - Показать координаты
+]]
 
-local scriptIcon = "📱" -- Icon for the script
-local scriptName = "Teleport Master"
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local localPlayer = Players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
 
--- Configuration
-local config = {
-    backgroundColor = {0.1, 0.1, 0.2, 0.9},
-    buttonColor = {0.2, 0.4, 0.8, 1},
-    buttonHoverColor = {0.3, 0.5, 0.9, 1},
-    textColor = {1, 1, 1, 1},
-    successColor = {0, 1, 0, 1},
-    errorColor = {1, 0, 0, 1},
-    animationSpeed = 0.2,
-    maxWaypoints = 50
+-- Цветовая схема
+local ColorScheme = {
+    Background = Color3.fromRGB(25, 30, 40),
+    Primary = Color3.fromRGB(65, 125, 210),
+    Secondary = Color3.fromRGB(45, 85, 160),
+    Accent = Color3.fromRGB(90, 190, 255),
+    Text = Color3.fromRGB(245, 245, 245),
+    Error = Color3.fromRGB(225, 75, 75),
+    Success = Color3.fromRGB(75, 225, 110),
+    SavedLocation = Color3.fromRGB(85, 195, 100),
+    DeleteButton = Color3.fromRGB(200, 70, 70)
 }
 
--- State variables
-local waypoints = {}
-local isMenuOpen = true
-local isTrackingPlayer = false
-local trackedPlayer = nil
-local lastUpdate = 0
-local updateInterval = 1000 -- 1 second
+-- Создание интерфейса
+local TeleportMenu = Instance.new("ScreenGui")
+TeleportMenu.Name = "TeleportMenu"
+TeleportMenu.ResetOnSpawn = false
+TeleportMenu.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- UI State
-local activeTab = "waypoints"
-local showWaypointPopup = false
-local newWaypointName = ""
-local newWaypointX, newWaypointY, newWaypointZ = 0, 0, 0
-local showTeleportPopup = false
-local teleportX, teleportY, teleportZ = 0, 0, 0
-local showPlayerList = false
+-- Основной фрейм с эффектом стекла
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0.35, 0, 0.55, 0)
+MainFrame.Position = UDim2.new(0.02, 0, 0.225, 0)
+MainFrame.BackgroundColor3 = ColorScheme.Background
+MainFrame.BackgroundTransparency = 0.15
+MainFrame.BorderSizePixel = 0
 
--- Animation variables
-local menuAnimation = {
-    progress = 1,
-    target = 1,
-    direction = 1
-}
+-- Эффект стекла
+local GlassEffect = Instance.new("Frame")
+GlassEffect.Size = UDim2.new(1, 0, 1, 0)
+GlassEffect.BackgroundTransparency = 0.9
+GlassEffect.BackgroundColor3 = Color3.fromRGB(200, 200, 255)
+GlassEffect.BorderSizePixel = 0
+GlassEffect.ZIndex = -1
 
-local buttonAnimations = {}
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0.04, 0)
+UICorner.Parent = MainFrame
+UICorner.Parent = GlassEffect
 
--- Initialize the script
-function initialize()
-    -- Load saved waypoints
-    loadWaypoints()
+-- Тень
+local DropShadow = Instance.new("ImageLabel")
+DropShadow.Name = "DropShadow"
+DropShadow.Image = "rbxassetid://1316045217"
+DropShadow.ImageColor3 = Color3.new(0, 0, 0)
+DropShadow.ImageTransparency = 0.8
+DropShadow.ScaleType = Enum.ScaleType.Slice
+DropShadow.SliceCenter = Rect.new(10, 10, 118, 118)
+DropShadow.Size = UDim2.new(1, 10, 1, 10)
+DropShadow.Position = UDim2.new(0, -5, 0, -5)
+DropShadow.BackgroundTransparency = 1
+
+-- Заголовок с градиентом
+local Title = Instance.new("Frame")
+Title.Name = "Title"
+Title.Size = UDim2.new(1, 0, 0.08, 0)
+Title.Position = UDim2.new(0, 0, 0, 0)
+Title.BackgroundTransparency = 1
+
+local TitleGradient = Instance.new("UIGradient")
+TitleGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, ColorScheme.Primary),
+    ColorSequenceKeypoint.new(1, ColorScheme.Accent)
+})
+TitleGradient.Rotation = 90
+TitleGradient.Parent = Title
+
+local TitleText = Instance.new("TextLabel")
+TitleText.Size = UDim2.new(1, 0, 1, 0)
+TitleText.Text = "✦ ТЕЛЕПОРТ МЕНЮ ✦"
+TitleText.TextColor3 = ColorScheme.Text
+TitleText.TextScaled = true
+TitleText.Font = Enum.Font.GothamBold
+TitleText.BackgroundTransparency = 1
+
+-- Область прокрутки
+local ScrollingFrame = Instance.new("ScrollingFrame")
+ScrollingFrame.Name = "ScrollingFrame"
+ScrollingFrame.Size = UDim2.new(1, 0, 0.92, 0)
+ScrollingFrame.Position = UDim2.new(0, 0, 0.08, 0)
+ScrollingFrame.BackgroundTransparency = 1
+ScrollingFrame.ScrollBarThickness = 5
+ScrollingFrame.ScrollBarImageColor3 = ColorScheme.Accent
+ScrollingFrame.CanvasSize = UDim2.new(0, 0, 2, 0)
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local UIPadding = Instance.new("UIPadding")
+UIPadding.PaddingTop = UDim.new(0, 12)
+UIPadding.PaddingBottom = UDim.new(0, 12)
+UIPadding.PaddingLeft = UDim.new(0, 12)
+UIPadding.PaddingRight = UDim.new(0, 12)
+UIPadding.Parent = ScrollingFrame
+
+-- Кнопка переключения меню
+local ToggleButton = Instance.new("ImageButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Size = UDim2.new(0.08, 0, 0.08, 0)
+ToggleButton.Position = UDim2.new(0.02, 0, 0.02, 0)
+ToggleButton.BackgroundColor3 = ColorScheme.Primary
+ToggleButton.BackgroundTransparency = 0.2
+ToggleButton.Image = "rbxassetid://3926305904"
+ToggleButton.ImageRectOffset = Vector2.new(124, 204)
+ToggleButton.ImageRectSize = Vector2.new(36, 36)
+ToggleButton.ImageColor3 = ColorScheme.Text
+
+local UICorner2 = Instance.new("UICorner")
+UICorner2.CornerRadius = UDim.new(0.5, 0)
+UICorner2.Parent = ToggleButton
+
+-- Эффект свечения при наведении
+local HoverEffect = Instance.new("Frame")
+HoverEffect.Size = UDim2.new(1, 10, 1, 10)
+HoverEffect.Position = UDim2.new(0, -5, 0, -5)
+HoverEffect.BackgroundTransparency = 1
+HoverEffect.ZIndex = -1
+
+local HoverGlow = Instance.new("ImageLabel")
+HoverGlow.Image = "rbxassetid://5028857084"
+HoverGlow.ImageColor3 = ColorScheme.Accent
+HoverGlow.ImageTransparency = 0.8
+HoverGlow.ScaleType = Enum.ScaleType.Slice
+HoverGlow.SliceCenter = Rect.new(24, 24, 276, 276)
+HoverGlow.Size = UDim2.new(1, 0, 1, 0)
+HoverGlow.BackgroundTransparency = 1
+HoverGlow.Parent = HoverEffect
+
+-- Сохраненные координаты
+local SavedLocations = {}
+
+-- Анимация кнопок
+local function SetupButton(button)
+    local originalSize = button.Size
+    local originalColor = button.BackgroundColor3
     
-    -- Create animations for buttons
-    setupAnimations()
+    local effect = HoverEffect:Clone()
+    effect.Parent = button
+    effect.Visible = false
     
-    -- Show welcome notification
-    showNotification("Teleport Master initialized!", config.successColor)
-end
-
--- Load saved waypoints
-function loadWaypoints()
-    -- This would load from a file in a real implementation
-    waypoints = {
-        {name = "Home", x = 100, y = 200, z = 50},
-        {name = "Shop", x = 300, y = 150, z = 50},
-        {name = "Park", x = 250, y = 400, z = 60}
-    }
-end
-
--- Save waypoints
-function saveWaypoints()
-    -- This would save to a file in a real implementation
-end
-
--- Setup button animations
-function setupAnimations()
-    buttonAnimations = {
-        waypointsBtn = {progress = 0, target = 0},
-        teleportBtn = {progress = 0, target = 0},
-        playersBtn = {progress = 0, target = 0},
-        settingsBtn = {progress = 0, target = 0},
-        extrasBtn = {progress = 0, target = 0}
-    }
-end
-
--- Show notification
-function showNotification(message, color)
-    -- Implementation would show a popup notification
-    print("Notification: " .. message)
-end
-
--- Get current player coordinates
-function getPlayerCoords()
-    -- Implementation would get actual player coordinates
-    return 100, 200, 50 -- Example coordinates
-end
-
--- Teleport player to coordinates
-function teleportTo(x, y, z)
-    -- Implementation would handle the teleportation
-    showNotification(string.format("Teleported to %.1f, %.1f, %.1f", x, y, z), config.successColor)
-end
-
--- Teleport to player
-function teleportToPlayer(playerId)
-    -- Implementation would get player coordinates and teleport
-    showNotification("Teleported to player " .. playerId, config.successColor)
-end
-
--- Start tracking player
-function startTracking(playerId)
-    isTrackingPlayer = true
-    trackedPlayer = playerId
-    showNotification("Now tracking player " .. playerId, config.successColor)
-end
-
--- Stop tracking player
-function stopTracking()
-    isTrackingPlayer = false
-    trackedPlayer = nil
-    showNotification("Stopped tracking", config.successColor)
-end
-
--- Save current position as waypoint
-function saveCurrentPosition(name)
-    local x, y, z = getPlayerCoords()
+    button.MouseEnter:Connect(function()
+        effect.Visible = true
+        TweenService:Create(button, TweenInfo.new(0.15), {
+            Size = originalSize + UDim2.new(0.05, 0, 0.05, 0),
+            BackgroundColor3 = ColorScheme.Accent
+        }):Play()
+        TweenService:Create(effect, TweenInfo.new(0.15), {
+            Size = originalSize + UDim2.new(0.1, 0, 0.1, 0)
+        }):Play()
+    end)
     
-    if #waypoints >= config.maxWaypoints then
-        showNotification("Waypoint limit reached!", config.errorColor)
+    button.MouseLeave:Connect(function()
+        effect.Visible = false
+        TweenService:Create(button, TweenInfo.new(0.15), {
+            Size = originalSize,
+            BackgroundColor3 = originalColor
+        }):Play()
+    end)
+end
+
+-- Сборка интерфейса
+MainFrame.Parent = TeleportMenu
+GlassEffect.Parent = MainFrame
+DropShadow.Parent = MainFrame
+Title.Parent = MainFrame
+TitleText.Parent = Title
+ScrollingFrame.Parent = MainFrame
+UIListLayout.Parent = ScrollingFrame
+ToggleButton.Parent = TeleportMenu
+TeleportMenu.Parent = playerGui
+
+-- Переменные состояния
+local menuVisible = true
+local debounce = false
+local trackingPlayer = nil
+local trackingConnection = nil
+
+-- Функция создания кнопки
+local function CreateButton(text, callback, isSavedLocation, isDeleteButton)
+    local button = Instance.new("TextButton")
+    button.Name = text
+    button.Size = UDim2.new(0.9, 0, 0, 50)
+    button.BackgroundColor3 = isDeleteButton and ColorScheme.DeleteButton 
+                            or isSavedLocation and ColorScheme.SavedLocation 
+                            or ColorScheme.Primary
+    button.BackgroundTransparency = 0.2
+    button.Text = text
+    button.TextColor3 = ColorScheme.Text
+    button.TextScaled = true
+    button.Font = Enum.Font.GothamMedium
+    button.AutoButtonColor = false
+    
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0.1, 0)
+    buttonCorner.Parent = button
+    
+    local textConstraint = Instance.new("UITextSizeConstraint")
+    textConstraint.MaxTextSize = 18
+    textConstraint.Parent = button
+    
+    SetupButton(button)
+    
+    button.MouseButton1Click:Connect(function()
+        if not debounce then
+            debounce = true
+            
+            -- Анимация нажатия
+            TweenService:Create(button, TweenInfo.new(0.1), {
+                BackgroundColor3 = ColorScheme.Accent,
+                TextColor3 = Color3.new(1,1,1),
+                Size = button.Size + UDim2.new(0, -5, 0, -5)
+            }):Play()
+            task.wait(0.1)
+            TweenService:Create(button, TweenInfo.new(0.1), {
+                BackgroundColor3 = isDeleteButton and ColorScheme.DeleteButton 
+                                or isSavedLocation and ColorScheme.SavedLocation 
+                                or ColorScheme.Primary,
+                TextColor3 = ColorScheme.Text,
+                Size = button.Size
+            }):Play()
+            
+            callback()
+            task.wait(0.2)
+            debounce = false
+        end
+    end)
+    
+    button.Parent = ScrollingFrame
+    return button
+end
+
+-- Функция показа/скрытия меню
+local function ToggleMenu()
+    menuVisible = not menuVisible
+    if menuVisible then
+        TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Position = UDim2.new(0.02, 0, 0.225, 0),
+            BackgroundTransparency = 0.15
+        }):Play()
+        ToggleButton.ImageRectOffset = Vector2.new(124, 204)
+    else
+        TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Position = UDim2.new(-0.5, 0, 0.225, 0),
+            BackgroundTransparency = 0.5
+        }):Play()
+        ToggleButton.ImageRectOffset = Vector2.new(964, 324)
+    end
+end
+
+ToggleButton.MouseButton1Click:Connect(ToggleMenu)
+
+-- Всплывающее окно с анимацией
+local function ShowPopup(title, message, isError)
+    local popup = Instance.new("Frame")
+    popup.Size = UDim2.new(0.8, 0, 0.15, 0)
+    popup.Position = UDim2.new(0.1, 0, 0.4, 0)
+    popup.BackgroundColor3 = ColorScheme.Background
+    popup.BackgroundTransparency = 0.1
+    popup.ZIndex = 10
+    
+    local popupCorner = Instance.new("UICorner")
+    popupCorner.CornerRadius = UDim.new(0.05, 0)
+    popupCorner.Parent = popup
+    
+    local popupShadow = DropShadow:Clone()
+    popupShadow.Parent = popup
+    
+    local popupGlass = GlassEffect:Clone()
+    popupGlass.Parent = popup
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, 0, 0.4, 0)
+    titleLabel.Text = title
+    titleLabel.TextColor3 = isError and ColorScheme.Error or ColorScheme.Success
+    titleLabel.TextScaled = true
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.BackgroundTransparency = 1
+    
+    local messageLabel = Instance.new("TextLabel")
+    messageLabel.Size = UDim2.new(1, 0, 0.6, 0)
+    messageLabel.Position = UDim2.new(0, 0, 0.4, 0)
+    messageLabel.Text = message
+    messageLabel.TextColor3 = ColorScheme.Text
+    messageLabel.TextScaled = true
+    messageLabel.Font = Enum.Font.Gotham
+    messageLabel.BackgroundTransparency = 1
+    
+    popup.Parent = TeleportMenu
+    titleLabel.Parent = popup
+    messageLabel.Parent = popup
+    
+    -- Анимация появления
+    popup.BackgroundTransparency = 1
+    popupGlass.BackgroundTransparency = 1
+    titleLabel.TextTransparency = 1
+    messageLabel.TextTransparency = 1
+    
+    TweenService:Create(popup, TweenInfo.new(0.3), {BackgroundTransparency = 0.1}):Play()
+    TweenService:Create(popupGlass, TweenInfo.new(0.3), {BackgroundTransparency = 0.9}):Play()
+    TweenService:Create(titleLabel, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+    TweenService:Create(messageLabel, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+    
+    -- Автозакрытие
+    task.delay(3, function()
+        TweenService:Create(popup, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(popupGlass, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(titleLabel, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+        TweenService:Create(messageLabel, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+        task.wait(0.3)
+        popup:Destroy()
+    end)
+end
+
+-- Функция телепортации
+local function TeleportTo(position)
+    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(position)
+    end
+end
+
+-- Функция обновления списка сохраненных точек
+local function UpdateSavedLocations()
+    -- Удаляем старые кнопки сохраненных точек
+    for _, child in ipairs(ScrollingFrame:GetChildren()) do
+        if child:GetAttribute("IsSavedLocation") then
+            child:Destroy()
+        end
+    end
+    
+    -- Создаем новые кнопки
+    for name, position in pairs(SavedLocations) do
+        local container = Instance.new("Frame")
+        container.Size = UDim2.new(0.9, 0, 0, 50)
+        container.BackgroundTransparency = 1
+        container.LayoutOrder = 1
+        container:SetAttribute("IsSavedLocation", true)
+        
+        local button = CreateButton(name, function()
+            TeleportTo(position)
+        end, true)
+        button.Size = UDim2.new(0.8, 0, 1, 0)
+        button.Position = UDim2.new(0, 0, 0, 0)
+        button.Parent = container
+        
+        local deleteBtn = CreateButton("×", function()
+            SavedLocations[name] = nil
+            UpdateSavedLocations()
+            ShowPopup("Успех", "Точка '"..name.."' удалена", false)
+        end, false, true)
+        deleteBtn.Size = UDim2.new(0.15, 0, 1, 0)
+        deleteBtn.Position = UDim2.new(0.85, 0, 0, 0)
+        deleteBtn.TextXAlignment = Enum.TextXAlignment.Center
+        deleteBtn.Parent = container
+        
+        container.Parent = ScrollingFrame
+    end
+end
+
+-- 1. Добавить новую точку телепорта
+CreateButton("Добавить точку телепорта", function()
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0.8, 0, 0.3, 0)
+    frame.Position = UDim2.new(0.1, 0, 0.35, 0)
+    frame.BackgroundColor3 = ColorScheme.Background
+    frame.BackgroundTransparency = 0.1
+    frame.ZIndex = 10
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0.05, 0)
+    corner.Parent = frame
+    
+    local shadow = DropShadow:Clone()
+    shadow.Parent = frame
+    
+    local glass = GlassEffect:Clone()
+    glass.Parent = frame
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0.2, 0)
+    title.Text = "Добавить точку телепорта"
+    title.TextColor3 = ColorScheme.Accent
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.BackgroundTransparency = 1
+    
+    local nameInput = Instance.new("TextBox")
+    nameInput.Size = UDim2.new(0.9, 0, 0.2, 0)
+    nameInput.Position = UDim2.new(0.05, 0, 0.2, 0)
+    nameInput.PlaceholderText = "Название точки"
+    nameInput.BackgroundColor3 = ColorScheme.Primary
+    nameInput.BackgroundTransparency = 0.3
+    nameInput.TextColor3 = ColorScheme.Text
+    nameInput.Font = Enum.Font.Gotham
+    nameInput.ClearTextOnFocus = false
+    
+    local inputCorner = Instance.new("UICorner")
+    inputCorner.CornerRadius = UDim.new(0.05, 0)
+    inputCorner.Parent = nameInput
+    
+    local coordsInput = Instance.new("TextBox")
+    coordsInput.Size = UDim2.new(0.9, 0, 0.2, 0)
+    coordsInput.Position = UDim2.new(0.05, 0, 0.4, 0)
+    coordsInput.PlaceholderText = "X,Y,Z или оставьте пустым для текущих"
+    coordsInput.BackgroundColor3 = ColorScheme.Primary
+    coordsInput.BackgroundTransparency = 0.3
+    coordsInput.TextColor3 = ColorScheme.Text
+    coordsInput.Font = Enum.Font.Gotham
+    coordsInput.ClearTextOnFocus = false
+    inputCorner:Clone().Parent = coordsInput
+    
+    local addBtn = CreateButton("Добавить", function()
+        local name = nameInput.Text
+        if name == "" then
+            ShowPopup("Ошибка", "Введите название точки", true)
+            return
+        end
+        
+        local position
+        if coordsInput.Text == "" then
+            -- Используем текущие координаты
+            if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                position = localPlayer.Character.HumanoidRootPart.Position
+            else
+                ShowPopup("Ошибка", "Не удалось получить текущие координаты", true)
+                return
+            end
+        else
+            -- Парсим введенные координаты
+            local coords = {}
+            for coord in string.gmatch(coordsInput.Text, "[^,]+") do
+                table.insert(coords, tonumber(coord))
+            end
+            
+            if #coords ~= 3 then
+                ShowPopup("Ошибка", "Введите координаты в формате X,Y,Z", true)
+                return
+            end
+            
+            position = Vector3.new(coords[1], coords[2], coords[3])
+        end
+        
+        -- Сохраняем точку
+        SavedLocations[name] = position
+        UpdateSavedLocations()
+        
+        ShowPopup("Успех", "Точка '"..name.."' добавлена", false)
+        frame:Destroy()
+    end)
+    addBtn.Size = UDim2.new(0.4, 0, 0.2, 0)
+    addBtn.Position = UDim2.new(0.3, 0, 0.7, 0)
+    addBtn.Parent = frame
+    
+    frame.Parent = TeleportMenu
+    title.Parent = frame
+    nameInput.Parent = frame
+    coordsInput.Parent = frame
+    
+    -- Анимация появления
+    frame.BackgroundTransparency = 1
+    glass.BackgroundTransparency = 1
+    title.TextTransparency = 1
+    nameInput.BackgroundTransparency = 1
+    nameInput.TextTransparency = 1
+    coordsInput.BackgroundTransparency = 1
+    coordsInput.TextTransparency = 1
+    addBtn.BackgroundTransparency = 1
+    addBtn.TextTransparency = 1
+    
+    TweenService:Create(frame, TweenInfo.new(0.3), {BackgroundTransparency = 0.1}):Play()
+    TweenService:Create(glass, TweenInfo.new(0.3), {BackgroundTransparency = 0.9}):Play()
+    TweenService:Create(title, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+    TweenService:Create(nameInput, TweenInfo.new(0.3), {BackgroundTransparency = 0.3, TextTransparency = 0}):Play()
+    TweenService:Create(coordsInput, TweenInfo.new(0.3), {BackgroundTransparency = 0.3, TextTransparency = 0}):Play()
+    TweenService:Create(addBtn, TweenInfo.new(0.3), {BackgroundTransparency = 0.2, TextTransparency = 0}):Play()
+end)
+
+-- 2. Телепорт к координатам
+CreateButton("Телепорт к координатам", function()
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0.8, 0, 0.3, 0)
+    frame.Position = UDim2.new(0.1, 0, 0.35, 0)
+    frame.BackgroundColor3 = ColorScheme.Background
+    frame.BackgroundTransparency = 0.1
+    frame.ZIndex = 10
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0.05, 0)
+    corner.Parent = frame
+    
+    local shadow = DropShadow:Clone()
+    shadow.Parent = frame
+    
+    local glass = GlassEffect:Clone()
+    glass.Parent = frame
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0.2, 0)
+    title.Text = "Введите координаты"
+    title.TextColor3 = ColorScheme.Accent
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.BackgroundTransparency = 1
+    
+    local xInput = Instance.new("TextBox")
+    xInput.Size = UDim2.new(0.9, 0, 0.2, 0)
+    xInput.Position = UDim2.new(0.05, 0, 0.2, 0)
+    xInput.PlaceholderText = "X"
+    xInput.BackgroundColor3 = ColorScheme.Primary
+    xInput.BackgroundTransparency = 0.3
+    xInput.TextColor3 = ColorScheme.Text
+    xInput.Font = Enum.Font.Gotham
+    xInput.ClearTextOnFocus = false
+    
+    local inputCorner = Instance.new("UICorner")
+    inputCorner.CornerRadius = UDim.new(0.05, 0)
+    inputCorner.Parent = xInput
+    
+    local yInput = xInput:Clone()
+    yInput.Position = UDim2.new(0.05, 0, 0.4, 0)
+    yInput.PlaceholderText = "Y"
+    yInput.Parent = frame
+    
+    local zInput = xInput:Clone()
+    zInput.Position = UDim2.new(0.05, 0, 0.6, 0)
+    zInput.PlaceholderText = "Z"
+    zInput.Parent = frame
+    
+    local teleportBtn = CreateButton("Телепорт", function()
+        local x = tonumber(xInput.Text)
+        local y = tonumber(yInput.Text)
+        local z = tonumber(zInput.Text)
+        
+        if x and y and z then
+            TeleportTo(Vector3.new(x, y, z))
+            ShowPopup("Успех", string.format("Телепорт к %.1f, %.1f, %.1f", x, y, z), false)
+            frame:Destroy()
+        else
+            ShowPopup("Ошибка", "Некорректные координаты", true)
+        end
+    end)
+    teleportBtn.Size = UDim2.new(0.4, 0, 0.2, 0)
+    teleportBtn.Position = UDim2.new(0.3, 0, 0.8, 0)
+    teleportBtn.Parent = frame
+    
+    frame.Parent = TeleportMenu
+    title.Parent = frame
+    xInput.Parent = frame
+    
+    -- Анимация появления
+    frame.BackgroundTransparency = 1
+    glass.BackgroundTransparency = 1
+    title.TextTransparency = 1
+    xInput.BackgroundTransparency = 1
+    xInput.TextTransparency = 1
+    yInput.BackgroundTransparency = 1
+    yInput.TextTransparency = 1
+    zInput.BackgroundTransparency = 1
+    zInput.TextTransparency = 1
+    teleportBtn.BackgroundTransparency = 1
+    teleportBtn.TextTransparency = 1
+    
+    TweenService:Create(frame, TweenInfo.new(0.3), {BackgroundTransparency = 0.1}):Play()
+    TweenService:Create(glass, TweenInfo.new(0.3), {BackgroundTransparency = 0.9}):Play()
+    TweenService:Create(title, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+    TweenService:Create(xInput, TweenInfo.new(0.3), {BackgroundTransparency = 0.3, TextTransparency = 0}):Play()
+    TweenService:Create(yInput, TweenInfo.new(0.3), {BackgroundTransparency = 0.3, TextTransparency = 0}):Play()
+    TweenService:Create(zInput, TweenInfo.new(0.3), {BackgroundTransparency = 0.3, TextTransparency = 0}):Play()
+    TweenService:Create(teleportBtn, TweenInfo.new(0.3), {BackgroundTransparency = 0.2, TextTransparency = 0}):Play()
+end)
+
+-- 3. Телепорт к игроку
+CreateButton("Телепорт к игроку", function()
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0.8, 0, 0.6, 0)
+    frame.Position = UDim2.new(0.1, 0, 0.2, 0)
+    frame.BackgroundColor3 = ColorScheme.Background
+    frame.BackgroundTransparency = 0.1
+    frame.ZIndex = 10
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0.05, 0)
+    corner.Parent = frame
+    
+    local shadow = DropShadow:Clone()
+    shadow.Parent = frame
+    
+    local glass = GlassEffect:Clone()
+    glass.Parent = frame
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0.1, 0)
+    title.Text = "Выберите игрока"
+    title.TextColor3 = ColorScheme.Accent
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.BackgroundTransparency = 1
+    
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Size = UDim2.new(1, 0, 0.8, 0)
+    scrollFrame.Position = UDim2.new(0, 0, 0.1, 0)
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.ScrollBarThickness = 5
+    scrollFrame.ScrollBarImageColor3 = ColorScheme.Accent
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 5)
+    layout.Parent = scrollFrame
+    
+    frame.Parent = TeleportMenu
+    title.Parent = frame
+    scrollFrame.Parent = frame
+    
+    -- Добавляем игроков
+    local players = Players:GetPlayers()
+    for _, player in ipairs(players) do
+        if player ~= localPlayer then
+            local btn = CreateButton(player.Name, function()
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    TeleportTo(player.Character.HumanoidRootPart.Position)
+                    ShowPopup("Успех", "Телепорт к "..player.Name, false)
+                    frame:Destroy()
+                else
+                    ShowPopup("Ошибка", "Игрок не найден", true)
+                end
+            end)
+            btn.Size = UDim2.new(0.9, 0, 0, 50)
+            btn.Position = UDim2.new(0.05, 0, 0, 0)
+            btn.Parent = scrollFrame
+        end
+    end
+    
+    -- Обновляем размер прокрутки
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #players * 55)
+    
+    -- Анимация появления
+    frame.BackgroundTransparency = 1
+    glass.BackgroundTransparency = 1
+    title.TextTransparency = 1
+    
+    TweenService:Create(frame, TweenInfo.new(0.3), {BackgroundTransparency = 0.1}):Play()
+    TweenService:Create(glass, TweenInfo.new(0.3), {BackgroundTransparency = 0.9}):Play()
+    TweenService:Create(title, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+end)
+
+-- 4. Постоянная телепортация за игроком
+CreateButton("Телепортация за игроком", function()
+    if trackingPlayer then
+        if trackingConnection then
+            trackingConnection:Disconnect()
+            trackingConnection = nil
+        end
+        trackingPlayer = nil
+        ShowPopup("Инфо", "Телепортация остановлена", false)
         return
     end
     
-    table.insert(waypoints, {
-        name = name,
-        x = x,
-        y = y,
-        z = z
-    })
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0.8, 0, 0.6, 0)
+    frame.Position = UDim2.new(0.1, 0, 0.2, 0)
+    frame.BackgroundColor3 = ColorScheme.Background
+    frame.BackgroundTransparency = 0.1
+    frame.ZIndex = 10
     
-    saveWaypoints()
-    showNotification("Waypoint '" .. name .. "' saved!", config.successColor)
-end
-
--- Delete waypoint
-function deleteWaypoint(index)
-    if index >= 1 and index <= #waypoints then
-        local name = waypoints[index].name
-        table.remove(waypoints, index)
-        saveWaypoints()
-        showNotification("Waypoint '" .. name .. "' deleted", config.successColor)
-    else
-        showNotification("Invalid waypoint index", config.errorColor)
-    end
-end
-
--- Update animations
-function updateAnimations(deltaTime)
-    -- Menu animation
-    menuAnimation.progress = lerp(menuAnimation.progress, menuAnimation.target, config.animationSpeed * deltaTime)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0.05, 0)
+    corner.Parent = frame
     
-    -- Button animations
-    for _, anim in pairs(buttonAnimations) do
-        anim.progress = lerp(anim.progress, anim.target, config.animationSpeed * deltaTime * 2)
-    end
-end
-
--- Linear interpolation
-function lerp(a, b, t)
-    return a + (b - a) * t
-end
-
--- Draw the UI
-function drawUI()
-    -- Main window
-    local windowWidth = 300 * menuAnimation.progress
-    local windowHeight = 500
+    local shadow = DropShadow:Clone()
+    shadow.Parent = frame
     
-    -- Draw main container
-    drawRect(10, 10, windowWidth, windowHeight, config.backgroundColor)
+    local glass = GlassEffect:Clone()
+    glass.Parent = frame
     
-    -- Draw header
-    drawText(scriptIcon .. " " .. scriptName, 20, 20, 24, config.textColor)
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0.1, 0)
+    title.Text = "Выберите игрока для слежения"
+    title.TextColor3 = ColorScheme.Accent
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.BackgroundTransparency = 1
     
-    -- Draw minimize button
-    if drawButton(isMenuOpen and "◄" or "►", windowWidth - 30, 20, 30, 30) then
-        isMenuOpen = not isMenuOpen
-        menuAnimation.target = isMenuOpen and 1 or 0
-    end
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Size = UDim2.new(1, 0, 0.8, 0)
+    scrollFrame.Position = UDim2.new(0, 0, 0.1, 0)
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.ScrollBarThickness = 5
+    scrollFrame.ScrollBarImageColor3 = ColorScheme.Accent
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
     
-    if menuAnimation.progress > 0.1 then
-        -- Draw tabs
-        local tabWidth = (windowWidth - 40) / 5
-        
-        if drawTabButton("Waypoints", 20, 60, tabWidth, 40, buttonAnimations.waypointsBtn.progress, activeTab == "waypoints") then
-            activeTab = "waypoints"
-        end
-        
-        if drawTabButton("Teleport", 20 + tabWidth, 60, tabWidth, 40, buttonAnimations.teleportBtn.progress, activeTab == "teleport") then
-            activeTab = "teleport"
-        end
-        
-        if drawTabButton("Players", 20 + tabWidth*2, 60, tabWidth, 40, buttonAnimations.playersBtn.progress, activeTab == "players") then
-            activeTab = "players"
-        end
-        
-        if drawTabButton("Extras", 20 + tabWidth*3, 60, tabWidth, 40, buttonAnimations.extrasBtn.progress, activeTab == "extras") then
-            activeTab = "extras"
-        end
-        
-        if drawTabButton("Settings", 20 + tabWidth*4, 60, tabWidth, 40, buttonAnimations.settingsBtn.progress, activeTab == "settings") then
-            activeTab = "settings"
-        end
-        
-        -- Draw tab content
-        if activeTab == "waypoints" then
-            drawWaypointsTab(windowWidth)
-        elseif activeTab == "teleport" then
-            drawTeleportTab(windowWidth)
-        elseif activeTab == "players" then
-            drawPlayersTab(windowWidth)
-        elseif activeTab == "extras" then
-            drawExtrasTab(windowWidth)
-        elseif activeTab == "settings" then
-            drawSettingsTab(windowWidth)
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 5)
+    layout.Parent = scrollFrame
+    
+    frame.Parent = TeleportMenu
+    title.Parent = frame
+    scrollFrame.Parent = frame
+    
+    -- Добавляем игроков
+    local players = Players:GetPlayers()
+    for _, player in ipairs(players) do
+        if player ~= localPlayer then
+            local btn = CreateButton(player.Name, function()
+                trackingPlayer = player
+                frame:Destroy()
+                
+                if trackingConnection then
+                    trackingConnection:Disconnect()
+                end
+                
+                trackingConnection = RunService.Heartbeat:Connect(function()
+                    if trackingPlayer and trackingPlayer.Character and trackingPlayer.Character:FindFirstChild("HumanoidRootPart") and
+                       localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        localPlayer.Character.HumanoidRootPart.CFrame = trackingPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+                    end
+                end)
+                
+                ShowPopup("Инфо", "Слежение за "..player.Name, false)
+            end)
+            btn.Size = UDim2.new(0.9, 0, 0, 50)
+            btn.Position = UDim2.new(0.05, 0, 0, 0)
+            btn.Parent = scrollFrame
         end
     end
     
-    -- Draw popups on top
-    if showWaypointPopup then
-        drawWaypointPopup(windowWidth, windowHeight)
-    end
+    -- Обновляем размер прокрутки
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #players * 55)
     
-    if showTeleportPopup then
-        drawTeleportPopup(windowWidth, windowHeight)
-    end
+    -- Анимация появления
+    frame.BackgroundTransparency = 1
+    glass.BackgroundTransparency = 1
+    title.TextTransparency = 1
     
-    if showPlayerList then
-        drawPlayerListPopup(windowWidth, windowHeight)
-    end
-end
+    TweenService:Create(frame, TweenInfo.new(0.3), {BackgroundTransparency = 0.1}):Play()
+    TweenService:Create(glass, TweenInfo.new(0.3), {BackgroundTransparency = 0.9}):Play()
+    TweenService:Create(title, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+end)
 
--- Draw waypoints tab
-function drawWaypointsTab(windowWidth)
-    local x, y, z = getPlayerCoords()
-    
-    -- Current coordinates
-    drawText(string.format("Current: %.1f, %.1f, %.1f", x, y, z), 20, 120, 16, config.textColor)
-    
-    -- Save current position button
-    if drawButton("Save Current Position", 20, 150, windowWidth - 40, 40) then
-        showWaypointPopup = true
-        newWaypointName = ""
-    end
-    
-    -- Waypoints list
-    drawText("Saved Waypoints:", 20, 210, 18, config.textColor)
-    
-    for i, wp in ipairs(waypoints) do
-        local yPos = 240 + (i-1)*60
-        
-        -- Waypoint entry
-        drawRect(20, yPos, windowWidth - 80, 50, {0.15, 0.15, 0.25, 1})
-        drawText(wp.name, 30, yPos + 10, 16, config.textColor)
-        drawText(string.format("%.1f, %.1f, %.1f", wp.x, wp.y, wp.z), 30, yPos + 30, 14, {0.8, 0.8, 0.8, 1})
-        
-        -- Teleport button
-        if drawButton("TP", windowWidth - 50, yPos, 30, 50) then
-            teleportTo(wp.x, wp.y, wp.z)
-        end
-        
-        -- Delete button (with confirmation)
-        if drawButton("✕", windowWidth - 90, yPos, 30, 50, {0.8, 0.2, 0.2, 1}) then
-            deleteWaypoint(i)
-        end
-    end
-end
+-- 5. Показать координаты
+local coordsEnabled = false
+local coordsDisplay = Instance.new("TextLabel")
+coordsDisplay.Name = "CoordsDisplay"
+coordsDisplay.Size = UDim2.new(0.3, 0, 0.05, 0)
+coordsDisplay.Position = UDim2.new(0.35, 0, 0, 0)
+coordsDisplay.BackgroundColor3 = ColorScheme.Background
+coordsDisplay.BackgroundTransparency = 0.7
+coordsDisplay.Text = "X: 0, Y: 0, Z: 0"
+coordsDisplay.TextColor3 = ColorScheme.Accent
+coordsDisplay.TextScaled = true
+coordsDisplay.Font = Enum.Font.GothamBold
+coordsDisplay.Visible = false
 
--- Draw teleport tab
-function drawTeleportTab(windowWidth)
-    -- Manual coordinates input
-    drawText("Teleport to Coordinates:", 20, 120, 18, config.textColor)
-    
-    drawText("X:", 20, 160, 16, config.textColor)
-    teleportX = drawInputField(50, 155, windowWidth - 70, 30, teleportX)
-    
-    drawText("Y:", 20, 200, 16, config.textColor)
-    teleportY = drawInputField(50, 195, windowWidth - 70, 30, teleportY)
-    
-    drawText("Z:", 20, 240, 16, config.textColor)
-    teleportZ = drawInputField(50, 235, windowWidth - 70, 30, teleportZ)
-    
-    if drawButton("Teleport", 20, 280, windowWidth - 40, 40) then
-        local x = tonumber(teleportX) or 0
-        local y = tonumber(teleportY) or 0
-        local z = tonumber(teleportZ) or 0
-        teleportTo(x, y, z)
-    end
-    
-    -- Additional teleport options
-    if drawButton("Teleport to Ground", 20, 340, windowWidth - 40, 40) then
-        -- Implementation would find ground level and teleport
-        showNotification("Teleported to ground level", config.successColor)
-    end
-    
-    if drawButton("Teleport to Marker", 20, 390, windowWidth - 40, 40) then
-        -- Implementation would teleport to map marker
-        showNotification("Teleported to map marker", config.successColor)
-    end
-end
+local coordsCorner = Instance.new("UICorner")
+coordsCorner.CornerRadius = UDim.new(0.1, 0)
+coordsCorner.Parent = coordsDisplay
 
--- Draw players tab
-function drawPlayersTab(windowWidth)
-    -- Player tracking status
-    if isTrackingPlayer then
-        if drawButton("Stop Tracking", 20, 120, windowWidth - 40, 40, {0.8, 0.2, 0.2, 1}) then
-            stopTracking()
-        end
-        drawText("Currently tracking: " .. trackedPlayer, 20, 170, 16, config.textColor)
-    else
-        drawText("Player Tracking", 20, 120, 18, config.textColor)
-        drawText("Not currently tracking", 20, 150, 16, {0.8, 0.8, 0.8, 1})
-    end
-    
-    -- Player list button
-    if drawButton("Show Player List", 20, 200, windowWidth - 40, 40) then
-        showPlayerList = true
-    end
-    
-    -- Nearby players
-    drawText("Nearby Players:", 20, 270, 18, config.textColor)
-    
-    -- Example player list (would be populated dynamically)
-    local players = {
-        {id = "Player1", distance = 50},
-        {id = "Player2", distance = 120},
-        {id = "Player3", distance = 250}
-    }
-    
-    for i, player in ipairs(players) do
-        local yPos = 300 + (i-1)*60
-        
-        -- Player entry
-        drawRect(20, yPos, windowWidth - 80, 50, {0.15, 0.15, 0.25, 1})
-        drawText(player.id, 30, yPos + 10, 16, config.textColor)
-        drawText(string.format("%d meters", player.distance), 30, yPos + 30, 14, {0.8, 0.8, 0.8, 1})
-        
-        -- Teleport button
-        if drawButton("TP", windowWidth - 50, yPos, 30, 50) then
-            teleportToPlayer(player.id)
-        end
-        
-        -- Track button
-        if drawButton("Track", windowWidth - 90, yPos, 30, 50, {0.2, 0.8, 0.2, 1}) then
-            startTracking(player.id)
-        end
-    end
-end
+local coordsShadow = DropShadow:Clone()
+coordsShadow.Parent = coordsDisplay
 
--- Draw extras tab
-function drawExtrasTab(windowWidth)
-    drawText("Extra Features:", 20, 120, 18, config.textColor)
-    
-    -- Vehicle spawner
-    if drawButton("Spawn Vehicle", 20, 160, windowWidth - 40, 40) then
-        showNotification("Vehicle spawned", config.successColor)
-    end
-    
-    -- Weapon spawner
-    if drawButton("Get Weapons", 20, 210, windowWidth - 40, 40) then
-        showNotification("Weapons added", config.successColor)
-    end
-    
-    -- Health and armor
-    if drawButton("Full Health + Armor", 20, 260, windowWidth - 40, 40) then
-        showNotification("Health and armor restored", config.successColor)
-    end
-    
-    -- Weather control
-    if drawButton("Change Weather", 20, 310, windowWidth - 40, 40) then
-        showNotification("Weather changed", config.successColor)
-    end
-    
-    -- Time control
-    if drawButton("Set Time", 20, 360, windowWidth - 40, 40) then
-        showNotification("Time set", config.successColor)
-    end
-end
+coordsDisplay.Parent = TeleportMenu
 
--- Draw settings tab
-function drawSettingsTab(windowWidth)
-    drawText("Settings:", 20, 120, 18, config.textColor)
+CreateButton("Показать координаты", function()
+    coordsEnabled = not coordsEnabled
+    coordsDisplay.Visible = coordsEnabled
     
-    -- Theme selector
-    drawText("Color Theme:", 20, 160, 16, config.textColor)
-    
-    local themes = {
-        {"Blue", {0.2, 0.4, 0.8, 1}},
-        {"Red", {0.8, 0.2, 0.2, 1}},
-        {"Green", {0.2, 0.8, 0.2, 1}},
-        {"Purple", {0.6, 0.2, 0.8, 1}}
-    }
-    
-    for i, theme in ipairs(themes) do
-        local xPos = 20 + (i-1)*70
-        if xPos + 60 > windowWidth then break end
-        
-        if drawButton(theme[1], xPos, 190, 60, 30, theme[2]) then
-            config.buttonColor = theme[2]
-            config.buttonHoverColor = {
-                math.min(theme[2][1] + 0.1, 1),
-                math.min(theme[2][2] + 0.1, 1),
-                math.min(theme[2][3] + 0.1, 1),
-                1
-            }
-            showNotification("Theme set to " .. theme[1], config.successColor)
-        end
+    if coordsEnabled then
+        RunService.Heartbeat:Connect(function()
+            if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local pos = localPlayer.Character.HumanoidRootPart.Position
+                coordsDisplay.Text = string.format("X: %d, Y: %d, Z: %d", math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z))
+            end
+        end)
     end
-    
-    -- Animation toggle
-    drawText("Animations:", 20, 240, 16, config.textColor)
-    if drawButton("Toggle Animations", 20, 270, windowWidth - 40, 40) then
-        config.animationSpeed = config.animationSpeed > 0 and 0 or 0.2
-        showNotification("Animations " .. (config.animationSpeed > 0 and "enabled" or "disabled"), config.successColor)
-    end
-    
-    -- Keybind settings
-    drawText("Keybinds:", 20, 330, 16, config.textColor)
-    if drawButton("Configure Keybinds", 20, 360, windowWidth - 40, 40) then
-        showNotification("Keybind configuration opened", config.successColor)
-    end
-    
-    -- Save settings
-    if drawButton("Save Settings", 20, 420, windowWidth - 40, 40, {0.2, 0.8, 0.2, 1}) then
-        showNotification("Settings saved", config.successColor)
-    end
-end
+end)
 
--- Draw waypoint popup
-function drawWaypointPopup(windowWidth, windowHeight)
-    -- Dark background
-    drawRect(0, 0, windowWidth + 20, windowHeight + 20, {0, 0, 0, 0.7})
-    
-    -- Popup container
-    local popupWidth = 250
-    local popupHeight = 180
-    local popupX = (windowWidth - popupWidth) / 2
-    local popupY = (windowHeight - popupHeight) / 2
-    
-    drawRect(popupX, popupY, popupWidth, popupHeight, config.backgroundColor)
-    drawText("Save Waypoint", popupX + 10, popupY + 10, 20, config.textColor)
-    
-    -- Name input
-    drawText("Name:", popupX + 10, popupY + 50, 16, config.textColor)
-    newWaypointName = drawInputField(popupX + 70, popupY + 45, popupWidth - 80, 30, newWaypointName)
-    
-    -- Current coordinates
-    local x, y, z = getPlayerCoords()
-    drawText(string.format("Coordinates: %.1f, %.1f, %.1f", x, y, z), popupX + 10, popupY + 85, 14, {0.8, 0.8, 0.8, 1})
-    
-    -- Save button
-    if drawButton("Save", popupX + 20, popupY + 120, popupWidth - 40, 40) then
-        if newWaypointName and newWaypointName ~= "" then
-            saveCurrentPosition(newWaypointName)
-            showWaypointPopup = false
-        else
-            showNotification("Please enter a name", config.errorColor)
-        end
-    end
-    
-    -- Cancel button
-    if drawButton("Cancel", popupX + 20, popupY + 170, popupWidth - 40, 40, {0.8, 0.2, 0.2, 1}) then
-        showWaypointPopup = false
-    end
-end
-
--- Draw teleport popup
-function drawTeleportPopup(windowWidth, windowHeight)
-    -- Similar implementation to waypoint popup
-    -- Would show manual coordinate input fields
-end
-
--- Draw player list popup
-function drawPlayerListPopup(windowWidth, windowHeight)
-    -- Similar implementation to waypoint popup
-    -- Would show a scrollable list of all players
-end
-
--- UI helper functions (these would be implemented in the actual environment)
-function drawRect(x, y, w, h, color) end
-function drawText(text, x, y, size, color) end
-function drawButton(text, x, y, w, h, color, isActive) return false end
-function drawTabButton(text, x, y, w, h, animProgress, isActive) return false end
-function drawInputField(x, y, w, h, currentText) return currentText end
-
--- Main loop
-function main()
-    local currentTime = getCurrentTime()
-    local deltaTime = currentTime - lastUpdate
-    lastUpdate = currentTime
-    
-    -- Update animations
-    updateAnimations(deltaTime)
-    
-    -- Handle player tracking
-    if isTrackingPlayer and deltaTime >= updateInterval then
-        -- Implementation would update position to follow tracked player
-    end
-    
-    -- Draw UI
-    drawUI()
-end
-
--- Initialize and start the script
-initialize()
-while true do
-    main()
-    wait(0) -- Yield to prevent freezing
-end
+-- Анимация появления меню
+MainFrame.Position = UDim2.new(-0.5, 0, 0.225, 0)
+ToggleMenu()
